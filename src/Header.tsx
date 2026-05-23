@@ -13,6 +13,7 @@ import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { ComponentsManager } from './ComponentsManager'
 import { saveMindmapToFile, loadMindmapFromFile } from './persistence/fileSystem'
+import { AuthButton } from './AuthButton'
 
 export function Header() {
   const viewMode = useMindmapStore((s) => s.viewMode)
@@ -226,6 +227,8 @@ export function Header() {
       >
         Reset
       </button>
+
+      <AuthButton />
 
       <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
       <ComponentsManager open={componentsOpen} onClose={() => setComponentsOpen(false)} />

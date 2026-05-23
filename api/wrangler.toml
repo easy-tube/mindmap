@@ -1,0 +1,48 @@
+# Cloudflare Worker for mindmap.icu's API.
+#
+# Single-environment: push to main → deploy to production. No dev/main
+# split (per Thommy's preference). Local dev uses `wrangler dev` against
+# the same wrangler.toml.
+#
+# After creating D1 and KV in the CF dashboard, fill in the IDs below.
+# The deploy workflow uses these to bind the resources to the Worker.
+
+name = "mindmap-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain — bind via CF dashboard (Workers & Pages → mindmap-api →
+# Settings → Triggers → Custom Domains → api.mindmap.icu).
+# Listed here for visibility; the actual route is configured in CF.
+# routes = [{ pattern = "api.mindmap.icu/*", custom_domain = true }]
+
+# D1 database — create via `wrangler d1 create mindmap-db` OR the CF
+# dashboard, then paste the database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "mindmap-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# KV for rate limiting + temporary state (OAuth state nonces, etc.)
+# Create via `wrangler kv:namespace create mindmap-kv`.
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Public-facing variables. SECRETS (GOOGLE_CLIENT_SECRET, SESSION_SECRET)
+# are set via `wrangler secret put` or GitHub Actions secrets.
+[vars]
+# Set per-deploy or via wrangler secret put — leaving placeholders so
+# wrangler doesn't error before you fill in the GCP console step.
+GOOGLE_CLIENT_ID = ""
+# `npm run deploy` reads these as defaults; the deploy workflow
+# overrides via --var.
+APP_ORIGIN = "https://mindmap.icu"
+API_ORIGIN = "https://api.mindmap.icu"
+
+# Observability — basic logs on by default
+[observability]
+enabled = true
+head_sampling_rate = 1.0
