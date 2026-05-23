@@ -50,6 +50,17 @@ export const NodeCard = memo(function NodeCard({
   const merged = effectiveData(node, components)
   const linkedComponent = node.componentRef ? components[node.componentRef] : null
 
+  // Completion across ALL fields (not just visible ones — gives a true
+  // sense of how much remains across all view modes).
+  const allFields = fields
+  const filledCount = allFields.filter((f) => {
+    const v = merged[f.key]
+    return v !== undefined && v !== null && v !== ''
+  }).length
+  const completion = allFields.length === 0
+    ? 1
+    : filledCount / allFields.length
+
   return (
     <div
       className={`
@@ -85,7 +96,14 @@ export const NodeCard = memo(function NodeCard({
           value={node.label}
           onChange={(v) => updateLabel(node.id, v)}
         />
-        <span className="ml-auto text-[10px] font-mono uppercase tracking-wider text-white/35">
+        {allFields.length > 0 && (
+          <CompletionChip
+            filled={filledCount}
+            total={allFields.length}
+            completion={completion}
+          />
+        )}
+        <span className="text-[10px] font-mono uppercase tracking-wider text-white/35">
           {node.kind}
         </span>
         <button
@@ -434,6 +452,45 @@ function FieldEditor({
         </div>
       )
   }
+}
+
+// ─── Completion chip ──────────────────────────────────────────────────
+
+function CompletionChip({
+  filled,
+  total,
+  completion,
+}: {
+  filled: number
+  total: number
+  completion: number
+}) {
+  // Color thresholds:
+  //   < 25%   → red    (mostly empty — needs work)
+  //   25-66%  → amber  (in progress)
+  //   66-99%  → soft   (almost there)
+  //   100%    → green  (complete)
+  const tone =
+    completion >= 1
+      ? 'bg-chozen/15 text-chozen ring-chozen/30'
+      : completion >= 0.66
+        ? 'bg-white/[0.06] text-white/70 ring-white/15'
+        : completion >= 0.25
+          ? 'bg-amber-500/[0.1] text-amber-400 ring-amber-500/25'
+          : 'bg-red-500/[0.08] text-red-400 ring-red-500/25'
+  return (
+    <span
+      title={`${filled} of ${total} fields filled`}
+      className={`
+        inline-flex items-center gap-1 rounded-full px-1.5 py-0.5
+        text-[9px] font-mono tabular-nums tracking-tight
+        ring-1
+        ${tone}
+      `}
+    >
+      {filled}/{total}
+    </span>
+  )
 }
 
 // ─── Menu item ────────────────────────────────────────────────────────

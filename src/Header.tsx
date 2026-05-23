@@ -11,6 +11,7 @@ import { useMindmapStore, selectBreadcrumb } from './store'
 import { VIEW_MODES, VIEW_MODE_LABELS, type ViewMode } from './types'
 import { useState } from 'react'
 import { ShareModal } from './ShareModal'
+import { ComponentsManager } from './ComponentsManager'
 import { saveMindmapToFile, loadMindmapFromFile } from './persistence/fileSystem'
 
 export function Header() {
@@ -22,7 +23,11 @@ export function Header() {
   const mindmap = useMindmapStore((s) => s.mindmap)
   const setMindmap = useMindmapStore((s) => s.setMindmap)
   const [shareOpen, setShareOpen] = useState(false)
+  const [componentsOpen, setComponentsOpen] = useState(false)
   const [fileMenuOpen, setFileMenuOpen] = useState(false)
+  const componentCount = useMindmapStore(
+    (s) => Object.keys(s.mindmap.components).length,
+  )
 
   const saveToFile = async () => {
     try {
@@ -169,6 +174,29 @@ export function Header() {
         )}
       </div>
 
+      {/* Components manager */}
+      {componentCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setComponentsOpen(true)}
+          title="Manage components"
+          className="
+            inline-flex items-center gap-1.5 rounded-md
+            border border-white/[0.08] bg-transparent
+            px-2.5 py-1 text-xs text-white/70
+            transition-colors hover:bg-white/[0.04] hover:text-white
+          "
+        >
+          <span>Components</span>
+          <span className="
+            text-[9px] font-mono tabular-nums px-1.5 py-0
+            rounded-full bg-chozen/15 text-chozen ring-1 ring-chozen/30
+          ">
+            {componentCount}
+          </span>
+        </button>
+      )}
+
       {/* Share */}
       <button
         type="button"
@@ -200,6 +228,7 @@ export function Header() {
       </button>
 
       <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
+      <ComponentsManager open={componentsOpen} onClose={() => setComponentsOpen(false)} />
     </header>
   )
 }

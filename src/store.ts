@@ -108,6 +108,18 @@ type MindmapState = {
    * to this instance for that field again.
    */
   resetInstanceOverride: (nodeId: NodeId, key: string) => void
+  /**
+   * Detach every instance of a component: copy the component's defaults
+   * (merged with each instance's overrides) into the instance's own data,
+   * then clear componentRef. The instances become standalone, with their
+   * last-effective values frozen in. Used internally by deleteComponent.
+   */
+  detachInstancesFromComponent: (componentId: ComponentId) => void
+  /**
+   * Delete a component. Instances are auto-detached first so their
+   * effective data is preserved. Returns the number of detached instances.
+   */
+  deleteComponent: (componentId: ComponentId) => number
 
   /** Replace the entire mindmap (used for import / reset to seed). */
   setMindmap: (mindmap: Mindmap) => void
@@ -355,6 +367,51 @@ export const useMindmapStore = create<MindmapState>((set, get) => {
       }
       set({ mindmap: next })
       scheduleSave(next)
+    },
+
+    detachInstancesFromComponent: (componentId) => {
+      const { mindmap } = get()
+      const component = mindmap.components[componentId]
+      if (!component) return
+      const nextNodes = { ...mindmap.nodes }
+      for (const node of Object.values(mindmap.nodes)) {
+        if (node.componentRef !== componentId) continue
+        // Bake effective data onto the node, clear componentRef.
+        const baked = { ...component.defaultData, ...node.data }
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { componentRef, ...rest } = node
+        nextNodes[node.id] = { ...rest, data: baked }
+      }
+      const next: Mindmap = { ...mindmap, nodes: nextNodes }
+      set({ mindmap: next })
+      scheduleSave(next)
+    },
+
+    deleteComponent: (componentId) => {
+      const { mindmap } = get()
+      const component = mindmap.components[componentId]
+      if (!component) return 0
+      const instances = Object.values(mindmap.nodes).filter(
+        (n) => n.componentRef === componentId,
+      )
+      // Detach first — preserves effective values on each instance.
+      const nextNodes = { ...mindmap.nodes }
+      for (const node of instances) {
+        const baked = { ...component.defaultData, ...node.data }
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { componentRef, ...rest } = node
+        nextNodes[node.id] = { ...rest, data: baked }
+      }
+      const nextComponents = { ...mindmap.components }
+      delete nextComponents[componentId]
+      const next: Mindmap = {
+        ...mindmap,
+        nodes: nextNodes,
+        components: nextComponents,
+      }
+      set({ mindmap: next })
+      scheduleSave(next)
+      return instances.length
     },
 
     setMindmap: (mindmap) => {
