@@ -16,6 +16,7 @@ import { Handle, Position, type NodeProps, type Node as RFNode } from '@xyflow/r
 import { useMindmapStore, selectChildren } from '../store'
 import { kindFields } from '../data/kinds'
 import type { Field, NodeId } from '../types'
+import { LongtextModal } from './LongtextModal'
 
 type CardData = { id: NodeId }
 
@@ -153,6 +154,7 @@ export const NodeCard = memo(function NodeCard({
                 field={f}
                 value={node.data[f.key]}
                 onChange={(v) => updateData(node.id, f.key, v)}
+                nodeLabel={node.label}
               />
             ))}
           </ul>
@@ -190,17 +192,47 @@ function FieldRow({
   field,
   value,
   onChange,
+  nodeLabel,
 }: {
   field: Field
   value: unknown
   onChange: (v: unknown) => void
+  nodeLabel: string
 }) {
+  const [expanded, setExpanded] = useState(false)
   return (
     <li>
-      <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-white/35">
-        {field.label}
+      <div className="mb-1 flex items-center gap-1.5">
+        <div className="text-[10px] font-medium uppercase tracking-wider text-white/35">
+          {field.label}
+        </div>
+        {field.type === 'longtext' && (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            title="Expand to fullscreen editor"
+            className="
+              ml-auto inline-flex h-4 w-4 items-center justify-center
+              rounded text-[10px] text-white/30
+              transition-colors hover:bg-white/[0.06] hover:text-white/70
+            "
+          >
+            ⤢
+          </button>
+        )}
       </div>
       <FieldEditor field={field} value={value} onChange={onChange} />
+      {field.type === 'longtext' && (
+        <LongtextModal
+          open={expanded}
+          title={nodeLabel}
+          fieldLabel={field.label}
+          value={(value as string) ?? ''}
+          placeholder={field.placeholder}
+          onChange={onChange}
+          onClose={() => setExpanded(false)}
+        />
+      )}
     </li>
   )
 }
