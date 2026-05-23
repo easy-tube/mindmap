@@ -1,39 +1,40 @@
 /**
  * NodeCard — the visual representation of a Node on the canvas.
  *
+ * IMPORTANT (post v0.2 React #185 fix): this component reads the node
+ * from the store by ID rather than receiving the full node via xyflow's
+ * `data` prop. That keeps xyflow's internal change detection stable —
+ * data only contains a string ID, never a fresh object on every render.
+ *
  * Renders:
  *   1. Header bar: label (inline-editable) + kind tag
  *   2. Body: the kind's Fields filtered by current view mode
- *   3. Footer: "open ↘" affordance if the node has children
- *
- * Style: glass card (matches the landing-page pillars), thin top-highlight
- * stroke, chozen-green accent on active states + drill-in chevron. Pure
- * black/white/green palette.
- *
- * Edit-in-place: every text/number/enum field is editable on click. Blur
- * commits via the store. Optimistic UI — no save indicator needed because
- * the change is local + immediate.
+ *   3. Footer: "Open ↘" affordance if the node has children
  */
 import { memo } from 'react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, Position, type NodeProps, type Node as RFNode } from '@xyflow/react'
 import { useMindmapStore, selectChildren } from '../store'
 import { kindFields } from '../data/kinds'
-import type { Node as MindmapNode, Field } from '../types'
+import type { Field, NodeId } from '../types'
 
-type NodeCardData = { node: MindmapNode }
+type CardData = { id: NodeId }
 
 export const NodeCard = memo(function NodeCard({
   data,
   selected,
-}: NodeProps & { data: NodeCardData }) {
-  const { node } = data
+}: NodeProps<RFNode<CardData>>) {
+  const node = useMindmapStore((s) => s.mindmap.nodes[data.id])
   const viewMode = useMindmapStore((s) => s.viewMode)
   const updateLabel = useMindmapStore((s) => s.updateNodeLabel)
   const updateData = useMindmapStore((s) => s.updateNodeData)
   const setActiveParent = useMindmapStore((s) => s.setActiveParent)
-  const hasChildren = useMindmapStore((s) =>
-    selectChildren(s, node.id).length > 0,
+  const childCount = useMindmapStore(
+    (s) => selectChildren(s, data.id).length,
   )
+
+  // Node could be removed from the store after xyflow already rendered
+  // its placeholder — bail gracefully.
+  if (!node) return null
 
   const fields = kindFields[node.kind] ?? []
   const visibleFields = fields.filter(
@@ -52,8 +53,8 @@ export const NodeCard = memo(function NodeCard({
         w-[260px]
       `}
     >
-      {/* xyflow needs source/target handles to be in the DOM for edges
-          to attach, even on our drill-in cards. Keep them invisible. */}
+      {/* xyflow needs source/target handles in the DOM for edges to attach,
+          even on our drill-in cards. Keep them invisible. */}
       <Handle type="target" position={Position.Top} className="!opacity-0 !pointer-events-none" />
       <Handle type="source" position={Position.Bottom} className="!opacity-0 !pointer-events-none" />
 
@@ -89,7 +90,7 @@ export const NodeCard = memo(function NodeCard({
       </div>
 
       {/* Footer — drill-in if children */}
-      {hasChildren && (
+      {childCount > 0 && (
         <button
           type="button"
           onClick={(e) => {
@@ -104,6 +105,9 @@ export const NodeCard = memo(function NodeCard({
           "
         >
           Open <span className="ml-1 align-baseline">↘</span>
+          <span className="ml-2 text-white/35 font-normal">
+            {childCount} {childCount === 1 ? 'child' : 'children'}
+          </span>
         </button>
       )}
     </div>
