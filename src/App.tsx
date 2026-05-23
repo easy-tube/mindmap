@@ -10,6 +10,7 @@
 import { ReactFlowProvider } from '@xyflow/react'
 import { Canvas } from './canvas/Canvas'
 import { Header } from './Header'
+import { CommandPalette } from './CommandPalette'
 
 export function App() {
   return (
@@ -29,6 +30,7 @@ export function App() {
         <div className="relative flex-1">
           <Canvas />
         </div>
+        <CommandPalette />
       </ReactFlowProvider>
     </div>
   )

@@ -59,6 +59,9 @@ export function Header() {
       {/* Spacer */}
       <div className="flex-1" />
 
+      {/* Cmd+K hint */}
+      <CommandPaletteHint />
+
       {/* + Add */}
       <AddNodeButton />
 
@@ -201,6 +204,45 @@ function KindOption({
       {hint && (
         <div className="text-[10px] text-white/40 mt-0.5">{hint}</div>
       )}
+    </button>
+  )
+}
+
+/**
+ * Visual reminder that Cmd/Ctrl+K opens the command palette. Looks like
+ * a search input but actually just dispatches the keyboard event when
+ * clicked, so the palette's existing handler does the work.
+ */
+function CommandPaletteHint() {
+  const trigger = () => {
+    const isMac = navigator.platform.toUpperCase().includes('MAC')
+    const ev = new KeyboardEvent('keydown', {
+      key: 'k',
+      [isMac ? 'metaKey' : 'ctrlKey']: true,
+      bubbles: true,
+    })
+    window.dispatchEvent(ev)
+  }
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    navigator.platform.toUpperCase().includes('MAC')
+  return (
+    <button
+      type="button"
+      onClick={trigger}
+      title="Jump to node"
+      className="
+        inline-flex items-center gap-2 rounded-md
+        border border-white/[0.08] bg-white/[0.02]
+        px-2.5 py-1 text-xs text-white/45
+        transition-colors hover:bg-white/[0.04] hover:text-white/70
+      "
+    >
+      <span>Jump…</span>
+      <kbd className="
+        rounded border border-white/[0.1] bg-white/[0.04]
+        px-1 py-0 text-[10px] font-mono leading-snug text-white/60
+      ">{isMac ? '⌘' : 'Ctrl'} K</kbd>
     </button>
   )
 }
