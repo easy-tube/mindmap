@@ -13,7 +13,7 @@
  */
 import { memo, useState } from 'react'
 import { Handle, Position, type NodeProps, type Node as RFNode } from '@xyflow/react'
-import { useMindmapStore, selectChildren } from '../store'
+import { useMindmapStore, selectChildren, effectiveData, isFieldOverridden } from '../store'
 import { kindFields } from '../data/kinds'
 import type { Field, NodeId } from '../types'
 import { LongtextModal } from './LongtextModal'
@@ -25,12 +25,15 @@ export const NodeCard = memo(function NodeCard({
   selected,
 }: NodeProps<RFNode<CardData>>) {
   const node = useMindmapStore((s) => s.mindmap.nodes[data.id])
+  const components = useMindmapStore((s) => s.mindmap.components)
   const viewMode = useMindmapStore((s) => s.viewMode)
   const updateLabel = useMindmapStore((s) => s.updateNodeLabel)
   const updateData = useMindmapStore((s) => s.updateNodeData)
   const setActiveParent = useMindmapStore((s) => s.setActiveParent)
   const addNode = useMindmapStore((s) => s.addNode)
   const deleteNode = useMindmapStore((s) => s.deleteNode)
+  const createComponent = useMindmapStore((s) => s.createComponentFromNode)
+  const resetOverride = useMindmapStore((s) => s.resetInstanceOverride)
   const childCount = useMindmapStore(
     (s) => selectChildren(s, data.id).length,
   )
@@ -44,6 +47,8 @@ export const NodeCard = memo(function NodeCard({
   const visibleFields = fields.filter(
     (f) => !f.visibleIn || f.visibleIn.includes(viewMode),
   )
+  const merged = effectiveData(node, components)
+  const linkedComponent = node.componentRef ? components[node.componentRef] : null
 
   return (
     <div
@@ -61,6 +66,18 @@ export const NodeCard = memo(function NodeCard({
           even on our drill-in cards. Keep them invisible. */}
       <Handle type="target" position={Position.Top} className="!opacity-0 !pointer-events-none" />
       <Handle type="source" position={Position.Bottom} className="!opacity-0 !pointer-events-none" />
+
+      {/* Component badge — only on instances */}
+      {linkedComponent && (
+        <div className="
+          flex items-center gap-1.5 border-b border-white/[0.06] bg-chozen/[0.04]
+          px-4 py-1 text-[10px] font-medium uppercase tracking-wider text-chozen/80
+        ">
+          <span>→</span>
+          <span className="truncate">{linkedComponent.name}</span>
+          <span className="ml-auto text-chozen/40 normal-case tracking-normal">component</span>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-2.5">
@@ -122,6 +139,35 @@ export const NodeCard = memo(function NodeCard({
                 hint={childCount === 0 ? 'no children yet' : undefined}
               />
               <div className="my-1 h-px bg-white/[0.06]" />
+              {!node.componentRef && (
+                <MenuItem
+                  label="Save as component"
+                  hint="Reuse this node's data elsewhere"
+                  onClick={() => {
+                    const name = window.prompt(
+                      'Component name:',
+                      node.label,
+                    )
+                    if (name) createComponent(node.id, name)
+                    setMenuOpen(false)
+                  }}
+                />
+              )}
+              {node.componentRef && linkedComponent && (
+                <MenuItem
+                  label="View linked component"
+                  hint={linkedComponent.name}
+                  onClick={() => {
+                    // No dedicated component view yet — drop a hint.
+                    window.alert(
+                      `Linked to "${linkedComponent.name}".\n\n` +
+                      `(In v0.4 this opens the component editor.)`,
+                    )
+                    setMenuOpen(false)
+                  }}
+                />
+              )}
+              <div className="my-1 h-px bg-white/[0.06]" />
               <MenuItem
                 label="Delete"
                 tone="danger"
@@ -152,8 +198,11 @@ export const NodeCard = memo(function NodeCard({
               <FieldRow
                 key={f.key}
                 field={f}
-                value={node.data[f.key]}
+                value={merged[f.key]}
+                overridden={isFieldOverridden(node, f.key)}
+                isInstance={!!node.componentRef}
                 onChange={(v) => updateData(node.id, f.key, v)}
+                onReset={() => resetOverride(node.id, f.key)}
                 nodeLabel={node.label}
               />
             ))}
@@ -191,12 +240,18 @@ export const NodeCard = memo(function NodeCard({
 function FieldRow({
   field,
   value,
+  overridden,
+  isInstance,
   onChange,
+  onReset,
   nodeLabel,
 }: {
   field: Field
   value: unknown
+  overridden: boolean
+  isInstance: boolean
   onChange: (v: unknown) => void
+  onReset: () => void
   nodeLabel: string
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -206,6 +261,21 @@ function FieldRow({
         <div className="text-[10px] font-medium uppercase tracking-wider text-white/35">
           {field.label}
         </div>
+        {/* Override badge — instance + key in overrides */}
+        {isInstance && overridden && (
+          <button
+            type="button"
+            onClick={onReset}
+            title="Reset to component default"
+            className="
+              text-[9px] font-medium uppercase tracking-wider
+              text-chozen/70 hover:text-chozen
+              transition-colors
+            "
+          >
+            overridden · reset
+          </button>
+        )}
         {field.type === 'longtext' && (
           <button
             type="button"

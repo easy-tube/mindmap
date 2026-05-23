@@ -62,23 +62,46 @@ export type Node = {
   parentId: NodeId | null
   kind: NodeKind
   label: string
-  /** Concrete values for the kind's declared Fields. Keyed by Field.key. */
+  /**
+   * Concrete values for the kind's declared Fields. Keyed by Field.key.
+   * For a component INSTANCE (componentRef !== undefined), this map
+   * holds the OVERRIDES — only the keys whose values differ from the
+   * referenced component's defaults. The effective data the editor
+   * sees is `{ ...component.defaultData, ...node.data }`.
+   */
   data: Record<string, unknown>
+  /**
+   * If set, this node is an instance of the given component. Its
+   * effective field values are the component's defaults merged with
+   * this node's `data` (overrides win). Edits write to `data` only.
+   * Editing the source component updates all non-overridden fields
+   * across every instance.
+   */
+  componentRef?: ComponentId
   /** Position in the parent's canvas — local coords. */
   position: { x: number; y: number }
   /** Optional fixed size; defaults to a sensible value if omitted. */
   size?: { w: number; h: number }
 }
 
+export type ComponentId = string
+
 /**
- * v0.3 — placeholder so future serialized data shape doesn't surprise us.
- * Not used in v0.2.
+ * A reusable definition. Instances reference it via `Node.componentRef`
+ * and may override individual fields. Schema-wise components inherit the
+ * `kindFields[kind]` schema — they don't define their own fields; they
+ * provide defaults for the kind's fields.
+ *
+ * Naming convention: components are named like "1v1 Game Mode",
+ * "Ranked Battle", etc. — capitalized, sentence-case.
  */
 export type Component = {
-  id: string
+  id: ComponentId
   name: string
-  fields: Field[]
+  kind: NodeKind
   defaultData: Record<string, unknown>
+  /** When this component was last edited at the source. */
+  updatedAt: number
 }
 
 /**

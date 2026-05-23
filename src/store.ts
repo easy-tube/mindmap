@@ -13,7 +13,14 @@
  * adapter is the seam.
  */
 import { create } from 'zustand'
-import type { Mindmap, Node as MindmapNode, NodeId, ViewMode } from './types'
+import type {
+  Component,
+  ComponentId,
+  Mindmap,
+  Node as MindmapNode,
+  NodeId,
+  ViewMode,
+} from './types'
 import { seedMindmap } from './data/seed'
 
 const STORAGE_KEY = 'mindmap.icu.v1'
@@ -71,6 +78,37 @@ type MindmapState = {
   }) => NodeId
   /** Delete a node + cascade to all descendants. Returns count deleted. */
   deleteNode: (id: NodeId) => number
+
+  // ─── Component actions ─────────────────────────────────────────────
+
+  /**
+   * Convert an existing node into a component definition.
+   * - Creates a new Component with the node's `kind` + `data` as defaults.
+   * - Replaces the source node with an instance of the new component
+   *   (componentRef set, data cleared to {} — no overrides).
+   * Returns the new component's id.
+   */
+  createComponentFromNode: (nodeId: NodeId, name: string) => ComponentId
+  /**
+   * Add a new instance of an existing component as a child of `parentId`.
+   * Returns the new node's id.
+   */
+  addInstance: (input: { parentId: NodeId; componentId: ComponentId; label?: string }) => NodeId
+  /**
+   * Edit the component definition's defaults. Propagates to all non-
+   * overridden fields on instances automatically (because instances
+   * compute effective data on read).
+   */
+  updateComponentDefault: (componentId: ComponentId, key: string, value: unknown) => void
+  /** Rename a component. */
+  renameComponent: (componentId: ComponentId, name: string) => void
+  /**
+   * Reset an instance field back to the component's default — removes
+   * the override. After this, edits to the component default propagate
+   * to this instance for that field again.
+   */
+  resetInstanceOverride: (nodeId: NodeId, key: string) => void
+
   /** Replace the entire mindmap (used for import / reset to seed). */
   setMindmap: (mindmap: Mindmap) => void
   resetToSeed: () => void
@@ -90,6 +128,11 @@ export const useMindmapStore = create<MindmapState>((set, get) => {
       const { mindmap } = get()
       const node = mindmap.nodes[id]
       if (!node) return
+      // For instance nodes: writes go to `data` which is the override
+      // map. The merge-on-read in `effectiveData` makes overrides win.
+      // If the new value matches the component default exactly, we
+      // store the override anyway — explicit "I set this myself" wins.
+      // (Use resetInstanceOverride() to clear an override.)
       const next: Mindmap = {
         ...mindmap,
         nodes: {
@@ -195,6 +238,125 @@ export const useMindmapStore = create<MindmapState>((set, get) => {
       return toDelete.size
     },
 
+    // ─── Component actions ─────────────────────────────────────────────
+
+    createComponentFromNode: (nodeId, name) => {
+      const { mindmap } = get()
+      const node = mindmap.nodes[nodeId]
+      if (!node) throw new Error(`Node ${nodeId} not found`)
+      const componentId =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `comp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const component: Component = {
+        id: componentId,
+        name: name.trim() || node.label,
+        kind: node.kind,
+        defaultData: { ...node.data },
+        updatedAt: Date.now(),
+      }
+      const next: Mindmap = {
+        ...mindmap,
+        components: { ...mindmap.components, [componentId]: component },
+        nodes: {
+          ...mindmap.nodes,
+          [nodeId]: {
+            ...node,
+            componentRef: componentId,
+            data: {}, // no overrides — instance inherits everything
+          },
+        },
+      }
+      set({ mindmap: next })
+      scheduleSave(next)
+      return componentId
+    },
+
+    addInstance: ({ parentId, componentId, label }) => {
+      const { mindmap } = get()
+      const component = mindmap.components[componentId]
+      if (!component) throw new Error(`Component ${componentId} not found`)
+      const siblings = Object.values(mindmap.nodes).filter(
+        (n) => n.parentId === parentId,
+      )
+      let pos = { x: 0, y: 0 }
+      if (siblings.length > 0) {
+        const rightmost = siblings.reduce((acc, s) =>
+          s.position.x > acc.position.x ? s : acc,
+        )
+        pos = { x: rightmost.position.x + 300, y: rightmost.position.y }
+      }
+      const id =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const newNode: MindmapNode = {
+        id,
+        parentId,
+        kind: component.kind,
+        label: label ?? component.name,
+        data: {},
+        componentRef: componentId,
+        position: pos,
+      }
+      const next: Mindmap = {
+        ...mindmap,
+        nodes: { ...mindmap.nodes, [id]: newNode },
+      }
+      set({ mindmap: next })
+      scheduleSave(next)
+      return id
+    },
+
+    updateComponentDefault: (componentId, key, value) => {
+      const { mindmap } = get()
+      const component = mindmap.components[componentId]
+      if (!component) return
+      const next: Mindmap = {
+        ...mindmap,
+        components: {
+          ...mindmap.components,
+          [componentId]: {
+            ...component,
+            defaultData: { ...component.defaultData, [key]: value },
+            updatedAt: Date.now(),
+          },
+        },
+      }
+      set({ mindmap: next })
+      scheduleSave(next)
+    },
+
+    renameComponent: (componentId, name) => {
+      const { mindmap } = get()
+      const component = mindmap.components[componentId]
+      if (!component) return
+      const next: Mindmap = {
+        ...mindmap,
+        components: {
+          ...mindmap.components,
+          [componentId]: { ...component, name: name.trim() || component.name },
+        },
+      }
+      set({ mindmap: next })
+      scheduleSave(next)
+    },
+
+    resetInstanceOverride: (nodeId, key) => {
+      const { mindmap } = get()
+      const node = mindmap.nodes[nodeId]
+      if (!node || !node.componentRef) return
+      if (!(key in node.data)) return // nothing to reset
+      const nextData = { ...node.data }
+      delete nextData[key]
+      const next: Mindmap = {
+        ...mindmap,
+        nodes: { ...mindmap.nodes, [nodeId]: { ...node, data: nextData } },
+      }
+      set({ mindmap: next })
+      scheduleSave(next)
+    },
+
     setMindmap: (mindmap) => {
       set({ mindmap, activeParentId: mindmap.rootId })
       scheduleSave(mindmap)
@@ -215,6 +377,31 @@ export const selectChildren = (
   parentId: NodeId | null,
 ): MindmapNode[] =>
   Object.values(state.mindmap.nodes).filter((n) => n.parentId === parentId)
+
+/**
+ * For an instance node: returns the effective data after merging the
+ * component's defaults with the node's overrides. For a non-instance:
+ * returns the node's data unchanged. Use this any time you read
+ * fields off a node for display.
+ */
+export function effectiveData(
+  node: MindmapNode,
+  components: Record<string, Component>,
+): Record<string, unknown> {
+  if (!node.componentRef) return node.data
+  const component = components[node.componentRef]
+  if (!component) return node.data
+  return { ...component.defaultData, ...node.data }
+}
+
+/**
+ * Is the given field overridden on this instance? (vs inheriting from
+ * the source component). Returns false for non-instances.
+ */
+export function isFieldOverridden(node: MindmapNode, key: string): boolean {
+  if (!node.componentRef) return false
+  return key in node.data
+}
 
 /** Breadcrumb path from root → active. */
 export const selectBreadcrumb = (

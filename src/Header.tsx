@@ -205,19 +205,31 @@ export function Header() {
 }
 
 /**
- * + Add — adds a new child under the currently active parent. Default
- * kind is 'note' (free-text) for fastest capture; a dropdown reveals
- * the typed kinds for cases where the user wants schema'd fields.
+ * + Add — adds a new child under the currently active parent.
+ *
+ * Single-click → quick 'note' (free-text) for fastest capture.
+ * ▾ chevron / right-click → menu with:
+ *   - Typed kinds (note / workspace / product-area / game-mode)
+ *   - All defined components (creates an instance)
  */
 function AddNodeButton() {
   const activeParentId = useMindmapStore((s) => s.activeParentId)
   const addNode = useMindmapStore((s) => s.addNode)
+  const addInstance = useMindmapStore((s) => s.addInstance)
+  const components = useMindmapStore((s) => s.mindmap.components)
   const [open, setOpen] = useState(false)
 
   const create = (kind: string, label: string) => {
     addNode({ parentId: activeParentId, kind, label })
     setOpen(false)
   }
+
+  const createInstance = (componentId: string) => {
+    addInstance({ parentId: activeParentId, componentId })
+    setOpen(false)
+  }
+
+  const componentList = Object.values(components)
 
   return (
     <div className="relative">
@@ -263,22 +275,67 @@ function AddNodeButton() {
           />
           <div
             className="
-              absolute right-0 top-full z-50 mt-2 w-48
+              absolute right-0 top-full z-50 mt-2 w-56
               rounded-lg border border-white/[0.1] bg-black/90
               backdrop-blur-xl
               shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]
               py-1
+              max-h-[60vh] overflow-y-auto
             "
           >
+            {/* Kinds */}
+            <div className="px-3 pt-1 pb-1 text-[9px] uppercase tracking-wider text-white/30">
+              New node
+            </div>
             <KindOption label="Note" kind="note" onPick={create} hint="Free-text card" />
             <KindOption label="Workspace" kind="workspace" onPick={create} hint="Top-level container" />
             <KindOption label="Product area" kind="product-area" onPick={create} hint="Major product surface" />
             <KindOption label="Game mode" kind="game-mode" onPick={create} hint="Battle type × style" />
+
+            {/* Components */}
+            <div className="mt-1 border-t border-white/[0.06] pt-1">
+              <div className="px-3 pt-1 pb-1 text-[9px] uppercase tracking-wider text-white/30">
+                Instance of component
+              </div>
+              {componentList.length === 0 ? (
+                <div className="px-3 py-1.5 text-[11px] text-white/30 italic">
+                  None yet. Right-click any node → Save as component.
+                </div>
+              ) : (
+                componentList.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => createInstance(c.id)}
+                    className="
+                      w-full text-left px-3 py-1.5
+                      transition-colors hover:bg-white/[0.04]
+                    "
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-chozen text-[10px]">→</span>
+                      <span className="text-sm font-medium text-white truncate">{c.name}</span>
+                    </div>
+                    <div className="text-[10px] text-white/40 mt-0.5">
+                      {c.kind} · updated {timeAgo(c.updatedAt)}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </>
       )}
     </div>
   )
+}
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts
+  if (diff < 60_000) return 'just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
 function FileMenuItem({
