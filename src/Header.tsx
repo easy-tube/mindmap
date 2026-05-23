@@ -10,6 +10,7 @@
 import { useMindmapStore, selectBreadcrumb } from './store'
 import { VIEW_MODES, VIEW_MODE_LABELS, type ViewMode } from './types'
 import { useState } from 'react'
+import { ShareModal } from './ShareModal'
 
 export function Header() {
   const viewMode = useMindmapStore((s) => s.viewMode)
@@ -17,6 +18,7 @@ export function Header() {
   const breadcrumb = useMindmapStore(selectBreadcrumb)
   const setActiveParent = useMindmapStore((s) => s.setActiveParent)
   const resetToSeed = useMindmapStore((s) => s.resetToSeed)
+  const [shareOpen, setShareOpen] = useState(false)
 
   return (
     <header className="
@@ -84,6 +86,20 @@ export function Header() {
         ))}
       </div>
 
+      {/* Share */}
+      <button
+        type="button"
+        onClick={() => setShareOpen(true)}
+        title="Generate a shareable URL"
+        className="
+          rounded-md border border-white/[0.08] bg-transparent
+          px-2.5 py-1 text-xs text-white/70
+          transition-colors hover:bg-white/[0.04] hover:text-white
+        "
+      >
+        Share
+      </button>
+
       {/* Reset (dev convenience) */}
       <button
         type="button"
@@ -99,6 +115,8 @@ export function Header() {
       >
         Reset
       </button>
+
+      <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
     </header>
   )
 }

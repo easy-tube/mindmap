@@ -11,6 +11,7 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { Canvas } from './canvas/Canvas'
 import { Header } from './Header'
 import { CommandPalette } from './CommandPalette'
+import { ShareLoader } from './ShareLoader'
 
 export function App() {
   return (
@@ -31,6 +32,7 @@ export function App() {
           <Canvas />
         </div>
         <CommandPalette />
+        <ShareLoader />
       </ReactFlowProvider>
     </div>
   )
