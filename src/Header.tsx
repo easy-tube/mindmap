@@ -9,6 +9,7 @@
  */
 import { useMindmapStore, selectBreadcrumb } from './store'
 import { VIEW_MODES, VIEW_MODE_LABELS, type ViewMode } from './types'
+import { useState } from 'react'
 
 export function Header() {
   const viewMode = useMindmapStore((s) => s.viewMode)
@@ -58,6 +59,9 @@ export function Header() {
       {/* Spacer */}
       <div className="flex-1" />
 
+      {/* + Add */}
+      <AddNodeButton />
+
       {/* View-mode toggle */}
       <div
         role="tablist"
@@ -93,6 +97,111 @@ export function Header() {
         Reset
       </button>
     </header>
+  )
+}
+
+/**
+ * + Add — adds a new child under the currently active parent. Default
+ * kind is 'note' (free-text) for fastest capture; a dropdown reveals
+ * the typed kinds for cases where the user wants schema'd fields.
+ */
+function AddNodeButton() {
+  const activeParentId = useMindmapStore((s) => s.activeParentId)
+  const addNode = useMindmapStore((s) => s.addNode)
+  const [open, setOpen] = useState(false)
+
+  const create = (kind: string, label: string) => {
+    addNode({ parentId: activeParentId, kind, label })
+    setOpen(false)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => create('note', 'New note')}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          setOpen(true)
+        }}
+        title="Add child (right-click for kind menu)"
+        className="
+          inline-flex items-center gap-1.5 rounded-md
+          bg-chozen/15 text-chozen
+          ring-1 ring-chozen/30
+          px-2.5 py-1 text-xs font-semibold
+          transition-colors hover:bg-chozen/25
+        "
+      >
+        <span className="text-base leading-none -mt-px">+</span>
+        Add
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Pick kind"
+        className="
+          absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full
+          ml-0.5 inline-flex h-5 w-5 items-center justify-center
+          rounded-md border border-white/[0.08] bg-white/[0.02]
+          text-[10px] text-white/45
+          transition-colors hover:bg-white/[0.06] hover:text-white/70
+        "
+      >
+        ▾
+      </button>
+
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="
+              absolute right-0 top-full z-50 mt-2 w-48
+              rounded-lg border border-white/[0.1] bg-black/90
+              backdrop-blur-xl
+              shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]
+              py-1
+            "
+          >
+            <KindOption label="Note" kind="note" onPick={create} hint="Free-text card" />
+            <KindOption label="Workspace" kind="workspace" onPick={create} hint="Top-level container" />
+            <KindOption label="Product area" kind="product-area" onPick={create} hint="Major product surface" />
+            <KindOption label="Game mode" kind="game-mode" onPick={create} hint="Battle type × style" />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function KindOption({
+  label,
+  kind,
+  onPick,
+  hint,
+}: {
+  label: string
+  kind: string
+  onPick: (kind: string, label: string) => void
+  hint?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(kind, `New ${label.toLowerCase()}`)}
+      className="
+        w-full text-left px-3 py-1.5
+        transition-colors hover:bg-white/[0.04]
+      "
+    >
+      <div className="text-sm font-medium text-white">{label}</div>
+      {hint && (
+        <div className="text-[10px] text-white/40 mt-0.5">{hint}</div>
+      )}
+    </button>
   )
 }
 

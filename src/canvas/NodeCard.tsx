@@ -11,7 +11,7 @@
  *   2. Body: the kind's Fields filtered by current view mode
  *   3. Footer: "Open ↘" affordance if the node has children
  */
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Handle, Position, type NodeProps, type Node as RFNode } from '@xyflow/react'
 import { useMindmapStore, selectChildren } from '../store'
 import { kindFields } from '../data/kinds'
@@ -28,9 +28,12 @@ export const NodeCard = memo(function NodeCard({
   const updateLabel = useMindmapStore((s) => s.updateNodeLabel)
   const updateData = useMindmapStore((s) => s.updateNodeData)
   const setActiveParent = useMindmapStore((s) => s.setActiveParent)
+  const addNode = useMindmapStore((s) => s.addNode)
+  const deleteNode = useMindmapStore((s) => s.deleteNode)
   const childCount = useMindmapStore(
     (s) => selectChildren(s, data.id).length,
   )
+  const [menuOpen, setMenuOpen] = useState(false)
 
   // Node could be removed from the store after xyflow already rendered
   // its placeholder — bail gracefully.
@@ -67,6 +70,73 @@ export const NodeCard = memo(function NodeCard({
         <span className="ml-auto text-[10px] font-mono uppercase tracking-wider text-white/35">
           {node.kind}
         </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setMenuOpen((o) => !o)
+          }}
+          title="Node actions"
+          className="
+            -mr-1.5 inline-flex h-6 w-6 items-center justify-center
+            rounded text-white/35
+            transition-colors hover:bg-white/[0.06] hover:text-white/80
+          "
+        >
+          ⋯
+        </button>
+        {menuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpen(false)
+              }}
+            />
+            <div
+              className="
+                absolute right-2 top-10 z-50 w-44
+                rounded-lg border border-white/[0.1] bg-black/95
+                backdrop-blur-xl
+                shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]
+                py-1
+              "
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MenuItem
+                label="Add child"
+                onClick={() => {
+                  addNode({ parentId: node.id, kind: 'note', label: 'New note' })
+                  setMenuOpen(false)
+                }}
+              />
+              <MenuItem
+                label="Open this canvas"
+                onClick={() => {
+                  setActiveParent(node.id)
+                  setMenuOpen(false)
+                }}
+                disabled={childCount === 0}
+                hint={childCount === 0 ? 'no children yet' : undefined}
+              />
+              <div className="my-1 h-px bg-white/[0.06]" />
+              <MenuItem
+                label="Delete"
+                tone="danger"
+                onClick={() => {
+                  const msg = childCount > 0
+                    ? `Delete "${node.label}" and ${childCount} ${childCount === 1 ? 'child' : 'children'}?`
+                    : `Delete "${node.label}"?`
+                  if (window.confirm(msg)) {
+                    deleteNode(node.id)
+                  }
+                  setMenuOpen(false)
+                }}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Body — fields filtered by view mode */}
@@ -262,6 +332,43 @@ function FieldEditor({
         </div>
       )
   }
+}
+
+// ─── Menu item ────────────────────────────────────────────────────────
+
+function MenuItem({
+  label,
+  onClick,
+  disabled,
+  hint,
+  tone,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  hint?: string
+  tone?: 'danger'
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`
+        block w-full text-left px-3 py-1.5
+        text-sm
+        transition-colors
+        disabled:opacity-40 disabled:cursor-not-allowed
+        ${tone === 'danger'
+          ? 'text-red-400 hover:bg-red-500/[0.08]'
+          : 'text-white hover:bg-white/[0.04]'
+        }
+      `}
+    >
+      <div>{label}</div>
+      {hint && <div className="text-[10px] text-white/35 mt-0.5">{hint}</div>}
+    </button>
+  )
 }
 
 // ─── Inline-editable label ────────────────────────────────────────────

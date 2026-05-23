@@ -62,6 +62,15 @@ type MindmapState = {
   updateNodeData: (id: NodeId, key: string, value: unknown) => void
   updateNodeLabel: (id: NodeId, label: string) => void
   updateNodePosition: (id: NodeId, position: { x: number; y: number }) => void
+  /** Create a new node as child of `parentId`. Returns the new node's id. */
+  addNode: (input: {
+    parentId: NodeId
+    kind: string
+    label?: string
+    position?: { x: number; y: number }
+  }) => NodeId
+  /** Delete a node + cascade to all descendants. Returns count deleted. */
+  deleteNode: (id: NodeId) => number
   /** Replace the entire mindmap (used for import / reset to seed). */
   setMindmap: (mindmap: Mindmap) => void
   resetToSeed: () => void
@@ -114,6 +123,76 @@ export const useMindmapStore = create<MindmapState>((set, get) => {
       }
       set({ mindmap: next })
       scheduleSave(next)
+    },
+
+    addNode: ({ parentId, kind, label, position }) => {
+      const { mindmap } = get()
+      // Position fallback: place next to the rightmost existing sibling,
+      // or at origin if none. Caller can override.
+      const siblings = Object.values(mindmap.nodes).filter(
+        (n) => n.parentId === parentId,
+      )
+      let pos = position
+      if (!pos) {
+        if (siblings.length === 0) {
+          pos = { x: 0, y: 0 }
+        } else {
+          const rightmost = siblings.reduce((acc, s) =>
+            s.position.x > acc.position.x ? s : acc,
+          )
+          pos = { x: rightmost.position.x + 300, y: rightmost.position.y }
+        }
+      }
+      const id =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const newNode: MindmapNode = {
+        id,
+        parentId,
+        kind,
+        label: label ?? 'New node',
+        data: {},
+        position: pos,
+      }
+      const next: Mindmap = {
+        ...mindmap,
+        nodes: { ...mindmap.nodes, [id]: newNode },
+      }
+      set({ mindmap: next })
+      scheduleSave(next)
+      return id
+    },
+
+    deleteNode: (id) => {
+      const { mindmap, activeParentId } = get()
+      if (id === mindmap.rootId) {
+        console.warn('[mindmap] refusing to delete root node')
+        return 0
+      }
+      if (!mindmap.nodes[id]) return 0
+      // Collect the target + all transitive descendants.
+      const toDelete = new Set<NodeId>([id])
+      let grew = true
+      while (grew) {
+        grew = false
+        for (const n of Object.values(mindmap.nodes)) {
+          if (n.parentId && toDelete.has(n.parentId) && !toDelete.has(n.id)) {
+            toDelete.add(n.id)
+            grew = true
+          }
+        }
+      }
+      const nextNodes = { ...mindmap.nodes }
+      for (const did of toDelete) delete nextNodes[did]
+      const next: Mindmap = { ...mindmap, nodes: nextNodes }
+      // If we deleted what was active, jump back up to its (former) parent.
+      const newActive = toDelete.has(activeParentId)
+        ? mindmap.nodes[activeParentId]?.parentId ?? mindmap.rootId
+        : activeParentId
+      set({ mindmap: next, activeParentId: newActive })
+      scheduleSave(next)
+      return toDelete.size
     },
 
     setMindmap: (mindmap) => {
