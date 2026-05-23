@@ -73,18 +73,15 @@ export function Canvas() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `children` is
   // deliberately NOT a dep; we read it inside the memo for current values
   // but only recompute on structural changes.
+  // TEMPORARY — debugging React #185. Empty initial state to test if
+  // xyflow + React 19 loops on its own.
   const rfNodesInitial = useMemo<RFNode<CardData>[]>(
-    () =>
-      children.map((n) => ({
-        id: n.id,
-        type: 'card',
-        position: n.position,
-        data: { id: n.id },
-        draggable: true,
-        selectable: true,
-      })),
+    () => [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeParentId, childIdsKey],
   )
+  // Unused while debugging — silences the linter.
+  void children
 
   // useNodesState gives xyflow controlled state. We seed it with our
   // memoized array and only push updates when the memo recomputes.
