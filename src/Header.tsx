@@ -11,6 +11,7 @@ import { useMindmapStore, selectBreadcrumb } from './store'
 import { VIEW_MODES, VIEW_MODE_LABELS, type ViewMode } from './types'
 import { useState } from 'react'
 import { ShareModal } from './ShareModal'
+import { saveMindmapToFile, loadMindmapFromFile } from './persistence/fileSystem'
 
 export function Header() {
   const viewMode = useMindmapStore((s) => s.viewMode)
@@ -18,7 +19,43 @@ export function Header() {
   const breadcrumb = useMindmapStore(selectBreadcrumb)
   const setActiveParent = useMindmapStore((s) => s.setActiveParent)
   const resetToSeed = useMindmapStore((s) => s.resetToSeed)
+  const mindmap = useMindmapStore((s) => s.mindmap)
+  const setMindmap = useMindmapStore((s) => s.setMindmap)
   const [shareOpen, setShareOpen] = useState(false)
+  const [fileMenuOpen, setFileMenuOpen] = useState(false)
+
+  const saveToFile = async () => {
+    try {
+      await saveMindmapToFile(mindmap)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (!msg.toLowerCase().includes('abort')) {
+        // User-cancel is fine; surface only real errors.
+        window.alert(`Save failed: ${msg}`)
+      }
+    } finally {
+      setFileMenuOpen(false)
+    }
+  }
+
+  const loadFromFile = async () => {
+    try {
+      const next = await loadMindmapFromFile()
+      if (window.confirm(
+        `Replace current mindmap with file contents?\n\n` +
+        `Loading: ${Object.keys(next.nodes).length} nodes`,
+      )) {
+        setMindmap(next)
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (!msg.toLowerCase().includes('abort')) {
+        window.alert(`Load failed: ${msg}`)
+      }
+    } finally {
+      setFileMenuOpen(false)
+    }
+  }
 
   return (
     <header className="
@@ -84,6 +121,52 @@ export function Header() {
             onClick={() => setViewMode(mode)}
           />
         ))}
+      </div>
+
+      {/* File menu — save / load */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setFileMenuOpen((o) => !o)}
+          title="Save / Load file"
+          className="
+            inline-flex items-center gap-1 rounded-md
+            border border-white/[0.08] bg-transparent
+            px-2.5 py-1 text-xs text-white/70
+            transition-colors hover:bg-white/[0.04] hover:text-white
+          "
+        >
+          File
+          <span className="text-[9px] -mr-1">▾</span>
+        </button>
+        {fileMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setFileMenuOpen(false)}
+            />
+            <div
+              className="
+                absolute right-0 top-full z-50 mt-2 w-52
+                rounded-lg border border-white/[0.1] bg-black/95
+                backdrop-blur-xl
+                shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]
+                py-1
+              "
+            >
+              <FileMenuItem
+                label="Save to file..."
+                hint="Download as .mindmap.json"
+                onClick={saveToFile}
+              />
+              <FileMenuItem
+                label="Load from file..."
+                hint="Open .mindmap.json"
+                onClick={loadFromFile}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Share */}
@@ -195,6 +278,30 @@ function AddNodeButton() {
         </>
       )}
     </div>
+  )
+}
+
+function FileMenuItem({
+  label,
+  hint,
+  onClick,
+}: {
+  label: string
+  hint?: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="
+        w-full text-left px-3 py-1.5
+        transition-colors hover:bg-white/[0.04]
+      "
+    >
+      <div className="text-sm font-medium text-white">{label}</div>
+      {hint && <div className="text-[10px] text-white/40 mt-0.5">{hint}</div>}
+    </button>
   )
 }
 
