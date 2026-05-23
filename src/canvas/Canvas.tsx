@@ -102,11 +102,28 @@ export function Canvas() {
   }, [childrenStructureKey, setNodes])
 
   // Handle changes: apply to xyflow's internal state AND propagate
-  // committed position changes back to the store. Drag-in-progress
-  // changes (`dragging: true`) stay internal until drag stop.
+  // committed position changes back to the store.
+  //
+  // IMPORTANT (React #185 round 3): we MUST filter out 'dimensions'
+  // changes before forwarding. xyflow's ResizeObserver fires a
+  // dimension change for every node on mount + whenever a node's
+  // measured size changes (which happens when the completion chip
+  // updates, the menu opens, ANYTHING resizes a card). Forwarding
+  // those to onNodesChangeInternal causes xyflow to update its
+  // internal state with the new dimensions, which re-renders the
+  // nodes, which re-runs the ResizeObserver, which fires more
+  // dimension changes — the React error #185 we kept hitting.
+  //
+  // The dimensions are useful for fitView and edge routing, but
+  // xyflow ALREADY tracks them via its internal store independently
+  // of our nodes array — we don't need to propagate them through
+  // setNodes. Filtering them out breaks the loop.
   const onNodesChange = useCallback(
     (changes: NodeChange<RFNode<CardData>>[]) => {
-      onNodesChangeInternal(changes)
+      const filtered = changes.filter((c) => c.type !== 'dimensions')
+      if (filtered.length > 0) {
+        onNodesChangeInternal(filtered)
+      }
       for (const c of changes) {
         if (c.type === 'position' && c.position && c.dragging === false) {
           updatePos(c.id, c.position)
