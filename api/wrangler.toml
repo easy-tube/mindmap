@@ -22,21 +22,21 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "mindmap-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "d9d9cc5a-69f1-4826-a912-51fde0ad7085"
 migrations_dir = "migrations"
 
 # KV for rate limiting + temporary state (OAuth state nonces, etc.)
 # Create via `wrangler kv:namespace create mindmap-kv`.
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "c5d269718d8f422db97c00fdca531354"
 
 # Public-facing variables. SECRETS (GOOGLE_CLIENT_SECRET, SESSION_SECRET)
 # are set via `wrangler secret put` or GitHub Actions secrets.
 [vars]
 # Set per-deploy or via wrangler secret put — leaving placeholders so
 # wrangler doesn't error before you fill in the GCP console step.
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "784202223299-145oq5i0ccfk8rvrcbkq18obl3sn32nt.apps.googleusercontent.com"
 # `npm run deploy` reads these as defaults; the deploy workflow
 # overrides via --var.
 APP_ORIGIN = "https://mindmap.icu"
