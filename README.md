@@ -26,15 +26,24 @@ The fix is a *structured persistent representation* of the product — typed nod
 ## Status
 
 - ✅ Repo scaffolded (Vite + React + TS + xyflow + Tailwind + Zustand)
-- ✅ Placeholder page deployed to [mindmap.icu](https://mindmap.icu)
-- ⏳ Canvas with drill-in
-- ⏳ View modes (code / user / simplified)
-- ⏳ Component instances + overrides
-- ⏳ File-system persistence
-- ⏳ AI agent read/write API
-- ⏳ Public share links
+- ✅ Deployed to [mindmap.icu](https://mindmap.icu)
+- ✅ Canvas with drill-in (xyflow, custom node cards, breadcrumb)
+- ✅ View modes (code / user / simplified, declared per-field)
+- ✅ Component instances + overrides (Figma-style reuse)
+- ✅ Add / delete / rename nodes; add-instance from any defined component
+- ✅ Components manager (list, rename, safe delete)
+- ✅ File save/load via File System Access API (Chrome/Edge native dialogs)
+  with anchor-download fallback on other browsers
+- ✅ Cmd/Ctrl+K fuzzy command palette
+- ✅ Public share links (`#share=…`, compressed JSON in the URL hash)
+- ✅ AI agent read/write API — see [docs/ai-integration.md](docs/ai-integration.md)
+- ✅ Field completion chip per node (color-coded by % filled)
+- ✅ Longtext modal editor for big fields
+- ⏳ Onboarding tour
 - ⏳ Real-time multiplayer (Y.js + Durable Objects)
-- ⏳ Plugin system
+- ⏳ Plugin system (custom kinds, custom field types, custom view modes)
+- ⏳ Server-backed workspaces + auth (Google / GitHub OAuth)
+- ⏳ Prezi-style camera transitions on drill-in
 
 ## Stack
 
@@ -87,6 +96,27 @@ type ViewMode = 'code' | 'user' | 'simplified' | string   // extensible
 ```
 
 The renderer + field-type system are **registries** from day one — third parties register their own node types and field types via plain JS imports, no fork needed.
+
+## AI integration
+
+The mindmap is structured data on disk — `.mindmap.json` files with a
+documented schema. AI agents read and write the same source of truth as
+human editors, no separate API.
+
+Read [docs/ai-integration.md](docs/ai-integration.md) for the full
+format spec + read/write patterns + collaboration models. Short version:
+
+```js
+const mm = JSON.parse(readFileSync('chozen.mindmap.json', 'utf8'))
+// walk mm.nodes — every Node has id / parentId / kind / data / position
+// resolve component instances via mm.components[node.componentRef]
+// write back with shallow-clone mutations
+```
+
+This is the strategic angle. Every vibe-coded product hits the same
+context-decay wall around month 4-6 because the AI helping build it
+can't hold the whole model in its head. A structured persistent
+representation that AI and humans both edit fixes that.
 
 ## License
 
