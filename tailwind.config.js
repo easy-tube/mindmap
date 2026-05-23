@@ -7,13 +7,30 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Reserved spot for a brand palette once the design lands.
-        // For now: neutral-* + a single accent. Keep accent flexible
-        // so we can A/B-test it before committing to the brand color.
-        accent: {
-          DEFAULT: '#22d3ee',
-          fg: '#082f37',
+        // Single brand accent — chozen green. Used sparingly (links,
+        // active states, focus rings). Body is pure black + off-white;
+        // accent never carries large surfaces.
+        chozen: {
+          DEFAULT: '#00FF1E',
+          soft: '#7FFF8E',     // hover state — slightly lighter, less intense
+          dim: 'rgba(0, 255, 30, 0.06)',  // backdrop tint
         },
+      },
+      fontFamily: {
+        // Inter for everything. Loaded via Google Fonts in index.html.
+        // Falls back to system-ui (SF Pro on Mac, Segoe UI on Win) if
+        // the network is down — both look Apple-ish.
+        sans: [
+          'Inter',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'sans-serif',
+        ],
+      },
+      letterSpacing: {
+        // Apple-style tight tracking on display sizes.
+        tightest: '-0.04em',
       },
     },
   },

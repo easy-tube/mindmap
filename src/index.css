@@ -8,4 +8,20 @@
     margin: 0;
     padding: 0;
   }
+
+  /* Inter's "ss01" stylistic-set fixes the lower-case 'a' and 'g' to feel
+     more Apple-like. The 'cv11' alt gives a single-story 'a' on display
+     sizes. Both small but they're what makes Inter feel premium. */
+  body {
+    font-feature-settings: 'ss01' on, 'cv11' on;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Selection in chozen green at low alpha — recognizable as a brand
+     touch but doesn't blow out the page. */
+  ::selection {
+    background-color: rgba(0, 255, 30, 0.25);
+    color: white;
+  }
 }
