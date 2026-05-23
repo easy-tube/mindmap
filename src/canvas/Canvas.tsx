@@ -73,15 +73,19 @@ export function Canvas() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `children` is
   // deliberately NOT a dep; we read it inside the memo for current values
   // but only recompute on structural changes.
-  // TEMPORARY — debugging React #185. Empty initial state to test if
-  // xyflow + React 19 loops on its own.
   const rfNodesInitial = useMemo<RFNode<CardData>[]>(
-    () => [],
+    () =>
+      children.map((n) => ({
+        id: n.id,
+        type: 'card',
+        position: n.position,
+        data: { id: n.id },
+        draggable: true,
+        selectable: true,
+      })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeParentId, childIdsKey],
   )
-  // Unused while debugging — silences the linter.
-  void children
 
   // useNodesState gives xyflow controlled state. We seed it with our
   // memoized array and only push updates when the memo recomputes.
@@ -160,22 +164,25 @@ export function Canvas() {
 }
 
 function EmptyDrillState() {
-  const breadcrumb = useMindmapStore((s): string[] => {
-    let cur: NodeId | null = s.activeParentId
+  // Same fix as elsewhere — read stable raw state, derive via useMemo.
+  // Selectors that return fresh arrays cause React #185.
+  const nodes = useMindmapStore((s) => s.mindmap.nodes)
+  const activeParentId = useMindmapStore((s) => s.activeParentId)
+  const breadcrumb = useMemo<string[]>(() => {
+    let cur: NodeId | null = activeParentId
     const trail: string[] = []
     while (cur) {
-      const n: MindmapNode | undefined = s.mindmap.nodes[cur]
+      const n: MindmapNode | undefined = nodes[cur]
       if (!n) break
       trail.unshift(n.label)
       cur = n.parentId
     }
     return trail
-  })
+  }, [nodes, activeParentId])
   const setActiveParent = useMindmapStore((s) => s.setActiveParent)
-  const parent = useMindmapStore((s): NodeId => {
-    const node = s.mindmap.nodes[s.activeParentId]
-    return node?.parentId ?? s.mindmap.rootId
-  })
+  const rootId = useMindmapStore((s) => s.mindmap.rootId)
+  const parent: NodeId =
+    nodes[activeParentId]?.parentId ?? rootId
   const label = breadcrumb[breadcrumb.length - 1] ?? 'this node'
 
   return (

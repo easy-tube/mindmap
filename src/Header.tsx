@@ -7,9 +7,9 @@
  *   - View-mode toggle (Code / User / Simplified)
  *   - Reset-to-seed button (dev convenience; will go behind a menu later)
  */
-import { useMindmapStore, selectBreadcrumb } from './store'
-import { VIEW_MODES, VIEW_MODE_LABELS, type ViewMode } from './types'
-import { useState } from 'react'
+import { useMindmapStore } from './store'
+import { VIEW_MODES, VIEW_MODE_LABELS, type ViewMode, type Node as MindmapNode, type NodeId } from './types'
+import { useMemo, useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { ComponentsManager } from './ComponentsManager'
 import { saveMindmapToFile, loadMindmapFromFile } from './persistence/fileSystem'
@@ -18,7 +18,22 @@ import { AuthButton } from './AuthButton'
 export function Header() {
   const viewMode = useMindmapStore((s) => s.viewMode)
   const setViewMode = useMindmapStore((s) => s.setViewMode)
-  const breadcrumb = useMindmapStore(selectBreadcrumb)
+  // CRITICAL — same reason as CommandPalette: selectors that return new
+  // arrays must NOT be used as Zustand selectors. Read raw state, then
+  // useMemo the derived array.
+  const nodes = useMindmapStore((s) => s.mindmap.nodes)
+  const activeParentId = useMindmapStore((s) => s.activeParentId)
+  const breadcrumb = useMemo<Array<{ id: NodeId; label: string }>>(() => {
+    const trail: Array<{ id: NodeId; label: string }> = []
+    let cur: NodeId | null = activeParentId
+    while (cur) {
+      const node: MindmapNode | undefined = nodes[cur]
+      if (!node) break
+      trail.unshift({ id: node.id, label: node.label })
+      cur = node.parentId
+    }
+    return trail
+  }, [nodes, activeParentId])
   const setActiveParent = useMindmapStore((s) => s.setActiveParent)
   const resetToSeed = useMindmapStore((s) => s.resetToSeed)
   const mindmap = useMindmapStore((s) => s.mindmap)

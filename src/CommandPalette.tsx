@@ -35,8 +35,17 @@ export function CommandPalette() {
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const items = useMindmapStore((s): Item[] => {
-    const nodes = s.mindmap.nodes
+  // CRITICAL — DON'T inline the item-list construction inside the Zustand
+  // selector. Zustand uses useSyncExternalStore which calls the selector
+  // on every check; if it returns a new array each call, React detects
+  // a "snapshot change" every time and re-renders infinitely (React
+  // error #185, "Maximum update depth exceeded").
+  //
+  // Fix: read STABLE raw state (the nodes Record — same reference across
+  // unrelated mutations) and compute the derived item list via useMemo,
+  // which caches on the nodes reference.
+  const nodes = useMindmapStore((s) => s.mindmap.nodes)
+  const items = useMemo<Item[]>(() => {
     const buildPath = (n: MindmapNode): string => {
       const trail: string[] = []
       let cur: MindmapNode | undefined = n
@@ -59,7 +68,7 @@ export function CommandPalette() {
       jumpTo: n.parentId ?? n.id,
       hasChildren: hasChildrenCache.get(n.id) ?? false,
     }))
-  })
+  }, [nodes])
 
   // Global keyboard: Cmd/Ctrl+K to open, Esc to close.
   useEffect(() => {
