@@ -21,7 +21,7 @@
  *   4. fitView runs only when `activeParentId` actually changes (ref
  *      check), not on every render of the Canvas component.
  */
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   ReactFlow,
   Background,
@@ -56,8 +56,37 @@ export function Canvas() {
 
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState<RFNode<CardData>>([])
 
-  // Sync from store → xyflow whenever the relevant children change.
-  // We rebuild the whole node array; xyflow diffs internally.
+  // KEY insight from the React #185 fix (round 2):
+  //
+  // We can NOT re-sync xyflow every time `children` changes — that's
+  // every store mutation, including position drags. The chain that
+  // creates the infinite loop:
+  //   1. NodeCard's completion chip recomputes when a field fills →
+  //      card height changes
+  //   2. xyflow detects the new card height → fires a "dimensions"
+  //      NodeChange via onNodesChange
+  //   3. We forward that change to onNodesChangeInternal, xyflow's
+  //      internal state updates
+  //   4. (Independently) the store mutation that triggered #1 also
+  //      changed `children` reference (useShallow checks per-element,
+  //      and the mutated node IS a new ref)
+  //   5. useEffect fires because `children` changed → setNodes called
+  //   6. xyflow re-renders, dimensions get re-measured → goto 2
+  //
+  // The fix: only externally setNodes when the SET of children
+  // changes (add / remove / reparent). Position changes from the
+  // store don't need to be pushed into xyflow — they're already in
+  // xyflow's state because they originated from xyflow's drag handler.
+  //
+  // We compute a STABLE string of "id|x|y" per child as the dep key.
+  // It changes when structure changes OR when positions change. If
+  // only data fields change (the common case during editing), the key
+  // stays the same → useEffect doesn't fire → no loop.
+  const childrenStructureKey = useMemo(
+    () => children.map((n) => `${n.id}:${n.position.x},${n.position.y}`).join('|'),
+    [children],
+  )
+
   useEffect(() => {
     setNodes(
       children.map((n) => ({
@@ -69,7 +98,8 @@ export function Canvas() {
         selectable: true,
       })),
     )
-  }, [children, setNodes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childrenStructureKey, setNodes])
 
   // Handle changes: apply to xyflow's internal state AND propagate
   // committed position changes back to the store. Drag-in-progress
