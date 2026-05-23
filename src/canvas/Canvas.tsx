@@ -5,21 +5,28 @@
  * (via NodeCard's "Open ↘") sets a new activeParentId, the canvas
  * re-renders with that node's children, and we fit the view.
  *
- * Architecture notes (post v0.2 React #185 fix):
- *   1. Children come from the Zustand store via `useShallow` so the
- *      array reference is stable when contents haven't changed. Without
- *      this, every store mutation produces a fresh array → useEffect
- *      re-fires → setNodes → re-render → repeat → React error #185.
- *   2. xyflow's own state is managed via `useNodesState`. We sync FROM
- *      the store TO xyflow whenever children change. We sync TO the
- *      store only on position commit (drag stop). Dimension / selection
- *      changes stay internal to xyflow — no need to persist them.
- *   3. NodeCard receives only the node ID via `data.id` and reads the
- *      full node from the store itself. This keeps the xyflow `data`
- *      object tiny + stable in identity, so xyflow's internal change
- *      detection doesn't fire on every store update.
- *   4. fitView runs only when `activeParentId` actually changes (ref
- *      check), not on every render of the Canvas component.
+ * Architecture (post-React-#185-round-4 — the loop kept coming back):
+ *
+ *   The root cause was xyflow's `nodes` prop changing IDENTITY on every
+ *   store mutation. Even with useShallow on the children selector + a
+ *   structureKey dep on useEffect + filtering 'dimensions' changes from
+ *   onNodesChange, *something* in the chain (likely xyflow's internal
+ *   ResizeObserver reacting to NodeCard layout shifts from the completion
+ *   chip) kept triggering measure → setNodes → re-measure → loop.
+ *
+ *   The bullet-proof fix: memoize the rfNodes array on the IDENTITY of
+ *   (activeParentId, child-ids) — NOT on children itself. Data edits and
+ *   committed position updates don't trigger a new rfNodes reference,
+ *   so xyflow's `nodes` prop is stable, so xyflow doesn't re-mount nodes,
+ *   so no re-measure cascade. Drag positions live in xyflow's internal
+ *   state and round-trip back to our store on drag-stop without going
+ *   through the rfNodes recompute path.
+ *
+ *   This means: positions in the store can briefly drift from positions
+ *   shown on canvas (until structure changes or parent switches and the
+ *   memo recomputes). For our use case — drag is the only thing that
+ *   changes positions, and xyflow's display is the source of truth during
+ *   a session — that's fine.
  */
 import { useEffect, useCallback, useMemo, useRef } from 'react'
 import {
@@ -46,49 +53,28 @@ type CardData = { id: NodeId }
 
 export function Canvas() {
   const activeParentId = useMindmapStore((s) => s.activeParentId)
-  // useShallow → equal when child IDs + order are the same. Mutating
-  // a child still produces a new array (because the child ref changes
-  // in the store), but that's fine — we want to re-sync then.
   const children = useMindmapStore(
     useShallow((s) => selectChildren(s, activeParentId)),
   )
   const updatePos = useMindmapStore((s) => s.updateNodePosition)
 
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState<RFNode<CardData>>([])
-
-  // KEY insight from the React #185 fix (round 2):
-  //
-  // We can NOT re-sync xyflow every time `children` changes — that's
-  // every store mutation, including position drags. The chain that
-  // creates the infinite loop:
-  //   1. NodeCard's completion chip recomputes when a field fills →
-  //      card height changes
-  //   2. xyflow detects the new card height → fires a "dimensions"
-  //      NodeChange via onNodesChange
-  //   3. We forward that change to onNodesChangeInternal, xyflow's
-  //      internal state updates
-  //   4. (Independently) the store mutation that triggered #1 also
-  //      changed `children` reference (useShallow checks per-element,
-  //      and the mutated node IS a new ref)
-  //   5. useEffect fires because `children` changed → setNodes called
-  //   6. xyflow re-renders, dimensions get re-measured → goto 2
-  //
-  // The fix: only externally setNodes when the SET of children
-  // changes (add / remove / reparent). Position changes from the
-  // store don't need to be pushed into xyflow — they're already in
-  // xyflow's state because they originated from xyflow's drag handler.
-  //
-  // We compute a STABLE string of "id|x|y" per child as the dep key.
-  // It changes when structure changes OR when positions change. If
-  // only data fields change (the common case during editing), the key
-  // stays the same → useEffect doesn't fire → no loop.
-  const childrenStructureKey = useMemo(
-    () => children.map((n) => `${n.id}:${n.position.x},${n.position.y}`).join('|'),
+  // Structure key = activeParentId + sorted child ids. Doesn't change
+  // when data fields or positions update — only when the SET of children
+  // (or current parent) changes.
+  const childIdsKey = useMemo(
+    () => children.map((n) => n.id).sort().join(','),
     [children],
   )
 
-  useEffect(() => {
-    setNodes(
+  // Memoize rfNodes on structure only. Data + position edits don't
+  // produce a new array reference, so xyflow's `nodes` prop is stable
+  // through field-editing sessions.
+  //
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `children` is
+  // deliberately NOT a dep; we read it inside the memo for current values
+  // but only recompute on structural changes.
+  const rfNodesInitial = useMemo<RFNode<CardData>[]>(
+    () =>
       children.map((n) => ({
         id: n.id,
         type: 'card',
@@ -97,27 +83,22 @@ export function Canvas() {
         draggable: true,
         selectable: true,
       })),
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [childrenStructureKey, setNodes])
+    [activeParentId, childIdsKey],
+  )
 
-  // Handle changes: apply to xyflow's internal state AND propagate
-  // committed position changes back to the store.
-  //
-  // IMPORTANT (React #185 round 3): we MUST filter out 'dimensions'
-  // changes before forwarding. xyflow's ResizeObserver fires a
-  // dimension change for every node on mount + whenever a node's
-  // measured size changes (which happens when the completion chip
-  // updates, the menu opens, ANYTHING resizes a card). Forwarding
-  // those to onNodesChangeInternal causes xyflow to update its
-  // internal state with the new dimensions, which re-renders the
-  // nodes, which re-runs the ResizeObserver, which fires more
-  // dimension changes — the React error #185 we kept hitting.
-  //
-  // The dimensions are useful for fitView and edge routing, but
-  // xyflow ALREADY tracks them via its internal store independently
-  // of our nodes array — we don't need to propagate them through
-  // setNodes. Filtering them out breaks the loop.
+  // useNodesState gives xyflow controlled state. We seed it with our
+  // memoized array and only push updates when the memo recomputes.
+  const [nodes, setNodes, onNodesChangeInternal] =
+    useNodesState<RFNode<CardData>>(rfNodesInitial)
+
+  useEffect(() => {
+    setNodes(rfNodesInitial)
+  }, [rfNodesInitial, setNodes])
+
+  // Forward node changes to xyflow's internal state EXCEPT dimensions.
+  // Dimension changes from ResizeObserver triggered the loop on previous
+  // attempts; xyflow tracks dimensions internally via its own store for
+  // fitView + minimap purposes, separate from the nodes array.
   const onNodesChange = useCallback(
     (changes: NodeChange<RFNode<CardData>>[]) => {
       const filtered = changes.filter((c) => c.type !== 'dimensions')
@@ -133,24 +114,19 @@ export function Canvas() {
     [onNodesChangeInternal, updatePos],
   )
 
-  // fitView only when we drilled into a different parent — not on
-  // every render. Without this guard, xyflow's fitView call triggers
-  // an internal state update → re-render → fitView again → loop.
+  // fitView only when we drill into a different parent.
   const { fitView } = useReactFlow()
   const lastFittedParent = useRef<NodeId | null>(null)
   useEffect(() => {
     if (lastFittedParent.current === activeParentId) return
     lastFittedParent.current = activeParentId
-    // Small delay so xyflow has time to mount the new node DOM elements
-    // and measure dimensions before we fit. Otherwise fitView computes
-    // bounds with zero-size nodes and over-zooms.
     const handle = window.setTimeout(() => {
       fitView({ padding: 0.2, duration: 400, maxZoom: 1.2 })
     }, 80)
     return () => window.clearTimeout(handle)
   }, [activeParentId, fitView])
 
-  const edges: RFEdge[] = []  // v0.2 — hierarchy is implicit; no edges yet
+  const edges: RFEdge[] = []
 
   if (children.length === 0) {
     return <EmptyDrillState />
@@ -186,10 +162,6 @@ export function Canvas() {
   )
 }
 
-/**
- * Drill-in landed on a leaf node — there's nothing to render. Give the
- * user a clear "this is a leaf" affordance instead of a blank canvas.
- */
 function EmptyDrillState() {
   const breadcrumb = useMindmapStore((s): string[] => {
     let cur: NodeId | null = s.activeParentId

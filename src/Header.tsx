@@ -13,7 +13,7 @@ import { useState } from 'react'
 import { ShareModal } from './ShareModal'
 import { ComponentsManager } from './ComponentsManager'
 import { saveMindmapToFile, loadMindmapFromFile } from './persistence/fileSystem'
-// import { AuthButton } from './AuthButton'  // disabled — isolating loop
+import { AuthButton } from './AuthButton'
 
 export function Header() {
   const viewMode = useMindmapStore((s) => s.viewMode)
@@ -228,9 +228,7 @@ export function Header() {
         Reset
       </button>
 
-      {/* AuthButton temporarily disabled — isolating React #185 trigger.
-          See commit message for next-step plan. */}
-      {/* <AuthButton /> */}
+      <AuthButton />
 
       <ShareModal open={shareOpen} onClose={() => setShareOpen(false)} />
       <ComponentsManager open={componentsOpen} onClose={() => setComponentsOpen(false)} />
